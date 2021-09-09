@@ -140,14 +140,22 @@ class Service
      * @return mixed
      * @throws \Exception
      */
-    public function string(?string $filters = '')
+    public function string(?string $filters = '', ?string $format = '', ?string $sortBy = '')
     {
         // If filters are required, return "" for results that should not be included.
         if (!empty($filters)) {
             $filters = explode(',', strtolower($filters));
         }
 
-        return collect($this->health())->reduce(function ($current, $resource) use($filters) {
+        return collect($this->health())
+        // Applies sorting after the health have been checked as it might be based on severity.
+        ->sortByDesc(function ($resource) use($sortBy) {
+            if ($sortBy === 'severity') {
+                return Commands::EXIT_CODES[$resource->getStatus()];
+            }
+            return null;
+        })
+        ->reduce(function ($current, $resource) use($filters, $format) {
 
             $resourceStatus = $resource->getStatus();
 
@@ -155,13 +163,23 @@ class Service
                 return $current;
             }
 
+            if ($format === 'summary') {
+                $stringContent =
+                    ($current ? config('health.string.glue') : '').
+                    $resource->getSummary();
+            } else {
+               $stringContent =
+                    ($current ? config('health.string.glue') : '').
+                    $this->makeString(
+                        $resource->abbreviation,
+                        $resourceStatus
+                    );
+            }
+
+
+
             return
-                $current.
-                ($current ? config('health.string.glue') : '').
-                $this->makeString(
-                    $resource->abbreviation,
-                    $resourceStatus
-                );
+                $current.$stringContent;
         });
     }
 }
