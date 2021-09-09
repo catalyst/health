@@ -56,35 +56,7 @@ class Health extends Controller
 
         // Summary format - Prints status: resource, and any extra piece of information we have.
         if ($format === 'summary') {
-            $format = 'M j H:m:s';
-            $now = date($format, time());
-
-            // Additional details to include in the response, such as errors
-            $more = '';
-
-            switch ($resource->getStatus()) {
-                case Result::OK:
-                    $msg = "{$resource->name} is running as expected";
-                    break;
-                case Result::WARNING:
-                    $msg = "{$resource->name} is running above the warning threshold";
-                    break;
-                case Result::CRITICAL:
-                    if (!empty($resource->errorMessage)) {
-                        $msg = "{$resource->errorMessage}";
-                    } else {
-                        $msg = "{$resource->name} service is failing or has reached the critical threshold";
-                    }
-                    $checkerClassName = (new \ReflectionClass(get_class($resource->checker)))->getName();
-                    $more = "{$checkerClassName} was used to determine the health";
-                    break;
-                case Result::UNKNOWN:
-                default:
-                    $msg = "{$resource->name} service health is unknown";
-                    break;
-            }
-            $response = \strtoupper($resource->getStatus()).": {$msg} (Checked {$now})\n{$more}";
-            return response($response)
+            return response($resource->getSummary())
                 ->header('Content-Type', 'text/plain');
 
         } else {
@@ -110,12 +82,14 @@ class Health extends Controller
     public function string(Request $request)
     {
         $filters = $request->get('filters');
+        $format = $request->get('format');
+        $sortBy = $request->get('sort');
 
         $this->healthService->setAction('string');
 
         return response(
-            $this->healthService->string($filters)
-        );
+            $this->healthService->string($filters, $format, $sortBy)
+        )->header('Content-Type', 'text/plain');
     }
 
     /**

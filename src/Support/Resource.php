@@ -226,7 +226,7 @@ class Resource implements JsonSerializable
         $exitCode = Commands::EXIT_CODES[result::OK];
         $this->targets->each(function ($target) use(&$exitCode) {
             // Handles exit codes based on the result's status.
-            $thisStatus = $target->result->getStatus();
+            $thisStatus = $target->result ? $target->result->getStatus() : Result::UNKNOWN;
             $thisExitCode = Commands::EXIT_CODES[$thisStatus];
             // An exit code with a greater value should be preferred as the output.
             if ($thisExitCode > $exitCode) {
@@ -235,6 +235,106 @@ class Resource implements JsonSerializable
         });
 
         return array_flip(Commands::EXIT_CODES)[$exitCode];
+    }
+
+    /**
+     * Returns the summary details, such as errors, etc to be listed with the
+     * rest of the summary information.
+     *
+     * @return string
+     */
+    public function getSummaryOfIssues()
+    {
+        $totalTargets = count($this->targets);
+        $targetCollection = collect($this->targets);
+        // Count the number of results that are not okay (using the critical state )
+        $totalNotOkay = $targetCollection->countBy(function ($target) {
+            return $target->result->getStatus() === Result::OK ? null : Result::CRITICAL;
+        })->get(Result::CRITICAL);
+
+        $more = collect($targetCollection)->map(function ($target) use($totalTargets, $totalNotOkay) {
+            if (empty($target->result->errorMessage)) {
+                return null;
+            }
+            $targetInfo = '';
+            // Append target name and status if there is more than one target
+            if ($totalTargets > 1) {
+                $targetInfo = "== {$target->name}";
+            }
+            // Append getStatus, if there is more than one level of severity above OK (e.g. Critical + Warning/Unknown)
+            if (!empty($targetInfo) && $totalNotOkay > 1) {
+                $targetInfo .= " ({$target->result->getStatus()})";
+            }
+            if (!empty($targetInfo)) {
+                $targetInfo .= " ==\n";
+            }
+            $errorMessage = "{$targetInfo}{$target->result->errorMessage}";
+            return $errorMessage;
+        })->filter()->join("\n")
+        ;
+
+        if (empty($more)) {
+            $checkerClassName = (new \ReflectionClass(get_class($this->checker)))->getName();
+            $more = "{$checkerClassName} was used to determine the health";
+        }
+
+        return $more;
+    }
+
+    /**
+     * Returns the summary format of the resource
+     *
+     * @return mixed
+     */
+    public function getSummary()
+    {
+        $format = 'M j H:m:s';
+        $now = date($format, time());
+
+        // Sets the message ($msg) for each affected resource, will use warning
+        // and error messages defined in the config.yaml where relevant.
+        $resourceStatus = $this->getStatus();
+        switch ($resourceStatus) {
+            case Result::WARNING:
+                if (!empty($this->warningMessage)) {
+                    $msg = $this->warningMessage;
+                } else {
+                    $msg = $this->name;
+                }
+                break;
+            case Result::CRITICAL:
+                if (!empty($this->errorMessage)) {
+                    $msg = $this->errorMessage;
+                } else {
+                    $msg = $this->name;
+                }
+                break;
+            case Result::UNKNOWN:
+            case Result::OK:
+                $msg = $this->name;
+                break;
+        }
+
+        // Additional details to include in the response, such as errors/warnings
+        $more = '';
+        if (empty($more) && in_array($resourceStatus, [Result::WARNING, Result::CRITICAL])) {
+            $more = $this->getSummaryOfIssues();
+        }
+
+        // Ignore $more if it matches the $msg (to reduce redundant information).
+        if ($msg === $more) {
+            $more = '';
+        }
+
+        // Ensure $more information is prefixed using a new line to see the information more easily.
+        if (!empty($more)) {
+            $more = "\n".$more;
+        }
+
+        // Put together the summary for the resource using it's components.
+        $response = \strtoupper($this->getStatus()).": {$msg} (Checked {$now}){$more}";
+
+        return $response;
     }
 
     protected function keysToCamel($array)
