@@ -43,14 +43,14 @@ class Result
      */
     public $errorMessage;
 
-    public function __construct(bool $healthy = false, $errorMessage = null)
+    public function __construct(bool $healthy = false, $errorMessage = null, string $status = '')
     {
         $this->healthy = $healthy;
 
         $this->errorMessage = $errorMessage;
 
         // Currently the status is inferred from the $healthy flag until full support is added.
-        $this->status = $healthy ? self::OK : self::CRITICAL;
+        $this->status = $status ? $status : ($healthy ? self::OK : self::CRITICAL);
     }
 
     /**
