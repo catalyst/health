@@ -51,9 +51,9 @@ abstract class Base implements Contract
      * @param null $errorMessage
      * @return Result
      */
-    public function makeResult($healthy = true, $errorMessage = null)
+    public function makeResult($healthy = true, $errorMessage = null, $status = '')
     {
-        return new Result($healthy, $errorMessage);
+        return new Result($healthy, $errorMessage, $status);
     }
 
     /**
@@ -74,7 +74,7 @@ abstract class Base implements Contract
      */
     protected function makeResultFromException($exception)
     {
-        return $this->makeResult(false, $exception->getMessage());
+        return $this->makeResult(false, $exception->getMessage(), Result::CRITICAL);
     }
 
     /**
